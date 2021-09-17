@@ -27,9 +27,10 @@ def generate_hotel():
     faker = Faker()
     f = open('hotel.csv', 'w')
     for i in range(MAX_N):
-        line = "{0},{1},{2},{3}\n".format(
+        country = randint(1, 239)
+        line = "{0};{1};{2};{3}\n".format(
             faker.name(),
-            faker.country(),
+            country,
             faker.country() + "Region" + str(choice(cat_hotel)),
             choice(cat_hotel))
         f.write(line)
@@ -42,11 +43,11 @@ def generate_tours():
     for i in range(MAX_N):
         week = randint(1, 6)
         hotel = randint(1, 999)
-
-        line = "{0},{1},{2},{3},{4},{5},{6}\n".format(
+        country = randint(1, 239)
+        line = "{0};{1};{2};{3};{4};{5};{6}\n".format(
             faker.name(),
             choice(t_tour),
-            faker.country(),
+            country,
             choice(on_off),
             choice(eat),
             week,
@@ -69,7 +70,7 @@ def generate_travel_p():
         d1 = datetime.strptime('1/1/2022 1:30 PM', '%m/%d/%Y %I:%M %p')
         d2 = datetime.strptime('1/1/2023 4:50 AM', '%m/%d/%Y %I:%M %p')
         a = random_date(d1, d2)
-        line = "{0},{1},{2},{3},{4}\n".format(
+        line = "{0};{1};{2};{3};{4}\n".format(
             tour,
             oper,
             a,
@@ -87,12 +88,14 @@ def generate_companies():
     for i in range(MAX_N):
         s = faker.address()
         s = s.replace('\n', '=')
-        line = "{0},{1},{2},{3},{4},{5},{6}\n".format(
+        phone = randint(10000000000, 99999999999)
+        fax = randint(10000000000, 99999999999)
+        line = "{0};{1};{2};{3};{4};{5};{6}\n".format(
             faker.name()[:5],
             faker.city(),
             s,
-            faker.phone_number(),
-            faker.phone_number()[1:],
+            phone,
+            fax,
             faker.phone_number()[2:8] + "@b.com",
             "Dir " + faker.name(),
         )
@@ -103,12 +106,5 @@ def generate_companies():
 if __name__ == "__main__":
     # generate_hotel()
     # generate_tours()
-    # generate_companies()
-    generate_travel_p()
-    faker = Faker()
-    s = faker.address()
-    print(type(s))
-    s = s.replace('\n', '=')
-    if '\n' in s:
-        print("ererfer")
-    print(s)
+    generate_companies()
+    # generate_travel_p()
