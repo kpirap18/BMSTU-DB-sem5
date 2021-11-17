@@ -947,10 +947,44 @@ END;
 CALL info_routine_exec('EXECUTE');
 
 -- =============================================================================================
--- === Создать хранимую процедуру с выходным параметром, которая уничтожает
+-- === OK Создать хранимую процедуру с выходным параметром, которая уничтожает
 -- все представления в текущей базе данных. Выходной параметр возвращает
 -- количество уничтоженных представлений. Созданную хранимую процедуру
 -- протестировать. 
+
+SELECT * FROM pg_catalog.pg_views 
+SELECT * FROM information_schema."views" v 
+
+CREATE VIEW ff AS 
+SELECT * -- INTO tours_buf
+FROM public.department d ;
+SELECT * FROM ff;
+
+CREATE OR REPLACE PROCEDURE drop_view(count_ INOUT int)  
+AS 
+$$
+DECLARE 
+    tmp_view_name record;
+    cursor_view_name CURSOR FOR
+	    SELECT viewname 
+	    FROM pg_catalog.pg_views
+	    -- ЧТОбы не удалить важное!!!!
+	    WHERE schemaname <> 'pg_catalog' AND schemaname <> 'information_schema';
+BEGIN  
+    OPEN cursor_view_name;
+    LOOP 
+        FETCH cursor_view_name INTO tmp_view_name;
+        EXIT WHEN NOT FOUND;
+   		count_ = count_ + 1;
+        EXECUTE 'DROP VIEW ' || tmp_view_name.viewname;
+        RAISE NOTICE 'View "%" was deleted!', tmp_view_name.viewname;
+    END LOOP;
+
+    CLOSE cursor_view_name;
+END;
+$$    LANGUAGE plpgsql;
+
+CALL drop_view(0) 
 
 -- ==========================================================================================
 -- === OK, доделать как принимаемый парамент имя таблицы 
@@ -1074,12 +1108,6 @@ UPDATE pg_stats
 EXECUTE 'SQL CONNECT TO "rk2_2"';
 
 EXECUTE 'select * from rate'
-
-
-
-
-
-
 
 
 
