@@ -67,6 +67,7 @@ VALUES
 	(6, 77, 52);
 
 
+
 -- ============================ ЗАДАНИЕ 2 - ЗАПРОСЫ ========================================
 -- Инструкцию SELECT, использующую простое выражение CASE 
 SELECT id, summ, 
@@ -108,9 +109,19 @@ FROM pg_index
 JOIN pg_class ON pg_index.indrelid=pg_class.oid
 WHERE relname='employee';
 
-SELECT *
-FROM pg_catalog.pg_indexes 
+SELECT * FROM pg_class
+SELECT * FROM rk2_2.public.
+
+SELECT * FROM pg_catalog.pg_indexes 
 WHERE tablename LIKE 'em%'
+
+SELECT * FROM pg_catalog.pg_database 
+
+SELECT *
+FROM information_schema."tables" t 
+
+SELECT *
+FROM rk2_2.public.employee e 
 
 ﻿-- === OK Создать хранимую процедуру с входным параметром – имя таблицы,
 -- которая выводит сведения об индексах указанной таблицы в текущей базе
@@ -171,6 +182,7 @@ call get_index('rate');
 -- Создать хранимую процедуру с двумя входными параметрами – имя базы данных 
 -- и имя таблицы, которая выводит сведения об индексах указанной таблицы в 
 -- указанной базе данных. Созданную хранимую процедуру протестировать.
+
 CREATE OR REPLACE PROCEDURE index_info
 (
     db_name_in VARCHAR(32),
@@ -182,14 +194,8 @@ DECLARE
 BEGIN
     FOR elem in
         SELECT *
-        FROM pg_index
-        -- В каталоге pg_index содержится часть информации об индексах.
-        -- Остальная информация в основном находится в pg_class.
-        --  В каталоге pg_class описываются таблицы и практически всё,
-        --  что имеет столбцы или каким-то образом подобно таблице.
-        --  Сюда входят индексы.
-        JOIN pg_class ON pg_index.indrelid = pg_class.oid
-        WHERE relname = table_name_in
+        FROM pg_indexes
+        WHERE tablename = table_name_in
         LOOP
             RAISE NOTICE ''elem: %'', elem;
         END LOOP;
@@ -283,6 +289,7 @@ BEGIN
         INTO reserve_name;
         RAISE NOTICE 'making copy of % as %', elem, reserve_name;
         EXECUTE 'CREATE DATABASE ' || reserve_name || ' WITH TEMPLATE ' || elem;
+       
     END LOOP;
 END;
 $$ LANGUAGE PLPGSQL;
@@ -290,12 +297,15 @@ $$ LANGUAGE PLPGSQL;
 CALL backup2();
 
 -- =================================================================================================
--- === NOT Создать хранимую процедуру с выходным параметром, которая уничтожает 
+-- === OK NOT Создать хранимую процедуру с выходным параметром, которая уничтожает 
 -- все SQL DDL триггеры (триггеры типа 'TR') в текущей базе данных. Выходной
 --  параметр возвращает количество уничтоженных триггеров. Созданную хранимую 
 -- процедуру протестировать. 
-SELECT *
-FROM information_schema.triggers t 
+SELECT * FROM information_schema.triggers t 
+
+SELECT * FROM pg_catalog.pg_trigger pt 
+
+SELECT * FROM pg_catalog.pg_event_trigger pet 
 
 CREATE OR REPLACE FUNCTION update_trigger()
 RETURNS TRIGGER 
@@ -313,6 +323,38 @@ AFTER UPDATE ON rate
 FOR EACH ROW 
 EXECUTE PROCEDURE update_trigger();
 
+-- по факту ЭТО УДАЛИТЬ DDL триггеры
+-- НОООО в посгрессе нет DDL триггеров
+-- там только DML.....
+-- ясен пень, что ничего не удалит
+CREATE OR REPLACE PROCEDURE drop_trigger(count_ INOUT int)  
+AS 
+$$
+DECLARE 
+    tmp_trigger_name record;
+    cursor_trigger_name CURSOR FOR
+	    SELECT trigger_name, event_object_table 
+	    FROM information_schema.triggers;
+	    --WHERE event_manipulation = 'CREATE' OR 
+	      --    event_manipulation = 'ALTER' OR 
+	        --  event_manipulation = 'DROP';
+BEGIN  
+    OPEN cursor_trigger_name;
+    LOOP 
+    	
+        FETCH cursor_trigger_name INTO tmp_trigger_name;
+        EXIT WHEN NOT FOUND;
+   		count_ = count_ + 1;
+        EXECUTE 'DROP TRIGGER ' || tmp_trigger_name.trigger_name || ' ON ' || tmp_trigger_name.event_object_table;
+        RAISE NOTICE 'Trigger "%" was deleted!', tmp_trigger_name.trigger_name;
+    END LOOP;
+
+    CLOSE cursor_trigger_name;
+END;
+$$    LANGUAGE plpgsql;
+
+DROP TRIGGER update_my ON rate;
+CALL drop_trigger(0); 
 
 -- ============================================================================================
 -- === OK Создать хранимую процедуру, которая, не уничтожая базу данных, уничтожает 
@@ -432,10 +474,14 @@ where table_schema = 'public' and
 -- все представления в текущей базе данных, которые не были зашифрованы. 
 -- Выходной параметр возвращает количество уничтоженных представлений. 
 -- Созданную хранимую процедуру протестировать. 
+     
+SELECT * FROM pg_catalog.pg_matviews pm 
+SELECT * FROM pg_catalog.pg_views pv 
 
+SELECT * FROM information_schema."views" v 
 
 -- ========================================================================================
--- === OK (только процедра, а не функция) Хранимую процедуру доступа к метаданным  (название таблицы и размер)
+-- === OK (update) (только процедра, а не функция) Хранимую процедуру доступа к метаданным  (название таблицы и размер)
 -- Информационная схема состоит из набора представлений, содержащих информацию 
 -- об объектах, определенных в текущей базе данных.
 -- pg_relation_size принимает OID или имя таблицы, индекса или TOAST-таблицы 
@@ -457,7 +503,8 @@ select * from my_tables;
 SELECT * from information_schema.TABLES
 
 
-create or replace function table_size() returns void as
+create or replace PROCEDURE table_size()
+as
 $$
 declare
     cur cursor
@@ -506,6 +553,37 @@ SELECT nspname || '.' || relname AS "relation",
 -- не выводить. Имена и список параметров должны выводиться в одну строку.
 -- Выходной параметр возвращает количество найденных функций.
 -- Созданную хранимую процедуру протестировать. 
+
+-- в pg_type названия типов, можно как-то сделать чтобы выводились имена типов, но как....
+ CREATE OR REPLACE PROCEDURE info_function
+(
+    count_ INOUT int
+)
+AS '
+DECLARE
+	i int,
+    elem RECORD;
+BEGIN
+    FOR elem in
+        SELECT proname, prokind, proargnames, proallargtypes, pronargs
+        FROM pg_proc
+        WHERE prokind = ''f'' and pronargs > 0
+    LOOP
+		count_ = count_ + 1;
+        RAISE NOTICE ''Name: %, count: %, name_param: %, type_param: %'', 
+						elem.proname, elem.pronargs, elem.proargnames, 
+						elem.proallargtypes;
+    END LOOP;
+END;
+' LANGUAGE plpgsql;
+
+CALL info_function(0);
+
+SELECT *
+FROM pg_proc
+SELECT *
+FROM information_schema.routines
+WHERE specific_schema = 'public'
 
 CREATE OR REPLACE PROCEDURE MyTables13 
 (
@@ -640,6 +718,10 @@ $$;
 CALL rem_duplicates('test_duplicates');
 
 
+select *
+from information_schema.columns 
+where information_schema.columns.table_name='test_duplicates'
+
 -- ===============================================================================================
 -- === OK Создать хранимую процедуру с входным параметром – имя базы данных,
 -- которая выводит имена ограничений CHECK и выражения SQL, которыми
@@ -751,7 +833,7 @@ begin
 END;
 'language plpgsql;
 
-SELECT * FROM pg_proc
+SELECT * FROM pg_proc where pronargs > 0 
 SELECT * FROM pg_type
 
 call show_functions();
@@ -825,7 +907,7 @@ END;
 
 CALL info_routine('SELECT');
 
-select *
+select data_type , routine_definition
 FROM information_schema.routines
 WHERE specific_schema = 'public';
 
@@ -836,12 +918,33 @@ RETURNS INT AS '
 
 
 -- ================================================================================================
--- === Создать хранимую процедуру без параметров, которая осуществляет поиск
+-- === OK (вроде так) Создать хранимую процедуру без параметров, которая осуществляет поиск
 -- ключевого слова 'EXEC' в тексте хранимых процедур в текущей базе
 -- данных. Хранимая процедура выводит инструкцию 'EXEC', которая
 -- выполняет хранимую процедуру или скалярную пользовательскую
 -- функцию. Созданную хранимую процедуру протестировать. 
+CREATE OR REPLACE PROCEDURE info_routine_exec
+(
+    str VARCHAR(32)
+)
+AS '
+DECLARE
+    elem RECORD;
+BEGIN
+    FOR elem in
+        SELECT routine_name, routine_type
+        FROM information_schema.routines
+             -- Чтобы были наши схемы.
+        WHERE specific_schema = ''public''
+        AND routine_type = ''PROCEDURE''
+        AND routine_definition LIKE CONCAT(''%'', str, ''%'')
+    LOOP
+        RAISE NOTICE ''elem: %'', elem;
+    END LOOP;
+END;
+' LANGUAGE plpgsql;
 
+CALL info_routine_exec('EXECUTE');
 
 -- =============================================================================================
 -- === Создать хранимую процедуру с выходным параметром, которая уничтожает
@@ -850,7 +953,8 @@ RETURNS INT AS '
 -- протестировать. 
 
 -- ==========================================================================================
--- === OK, доделать как принимаемый парамент имя таблицы Вывод всех столбцов из таблицы 
+-- === OK, доделать как принимаемый парамент имя таблицы 
+-- Вывод всех столбцов из таблицы 
 CREATE OR REPLACE PROCEDURE proc_name()
 AS '
 DECLARE
@@ -961,4 +1065,23 @@ SELECT * FROM pg_catalog.pg_stat_activity psa
 select specific_catalog, specific_schema, specific_name, routine_definition
 from information_schema.ROUTINES
 WHERE specific_schema = 'public'
+
+SELECT * FROM pg_stats WHERE tablename = 'tbl'
+UPDATE pg_stats
+
+
+
+EXECUTE 'SQL CONNECT TO "rk2_2"';
+
+EXECUTE 'select * from rate'
+
+
+
+
+
+
+
+
+
+
 
