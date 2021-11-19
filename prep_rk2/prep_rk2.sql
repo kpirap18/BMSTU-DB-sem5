@@ -368,14 +368,14 @@ $$ LANGUAGE plpgsql;
 CREATE EVENT TRIGGER snitch ON ddl_command_start 
 EXECUTE PROCEDURE snitch();
 
-CREATE OR REPLACE PROCEDURE drop_trigger(count_ INOUT int)  
+CREATE OR REPLACE PROCEDURE drop_ddl_trigger(count_ INOUT int)  
 AS 
 $$
 DECLARE 
     tmp_trigger_name record;
     cursor_trigger_name CURSOR FOR
 	    SELECT evtname, evtevent 
-	    FROM pg_catalog.pg_event_trigger 
+	    FROM pg_catalog.pg_event_trigger ;
 BEGIN  
     OPEN cursor_trigger_name;
     LOOP 
@@ -383,16 +383,16 @@ BEGIN
         FETCH cursor_trigger_name INTO tmp_trigger_name;
         EXIT WHEN NOT FOUND;
    		count_ = count_ + 1;
-        EXECUTE 'DROP TRIGGER ' || tmp_trigger_name.trigger_name || ' ON ' || tmp_trigger_name.event_object_table;
-        RAISE NOTICE 'Trigger "%" was deleted!', tmp_trigger_name.trigger_name;
+        EXECUTE 'DROP EVENT TRIGGER ' || tmp_trigger_name.evtname;
+        RAISE NOTICE 'Trigger "%" was deleted!', tmp_trigger_name.evtname;
     END LOOP;
 
     CLOSE cursor_trigger_name;
 END;
 $$    LANGUAGE plpgsql;
 
-DROP TRIGGER update_my ON rate;
-CALL drop_trigger(0); 
+CALL drop_ddl_trigger(0); 
+
 
 
 -- ============================================================================================
