@@ -761,6 +761,31 @@ select *
 from information_schema.columns 
 where information_schema.columns.table_name='test_duplicates'
 
+------ еще вариант
+drop table if exists tmp;
+create table if not exists tmp (a integer, b integer, c varchar(5));
+insert into tmp values (1, 1, '2'), (2, 3, '3'), (1, 1, '2'), (2, 3, '3'), (1, 1, '2');
+select * from tmp;
+
+create or replace procedure del_duplicates_a(table_in varchar)
+as
+$$
+begin
+	EXECUTE 'delete from '
+        || quote_ident(table_in)
+        || ' where ctid not in (select min(ctid) from '
+        || quote_ident(table_in)
+        || ' group by '
+        || quote_ident(table_in)
+        || '.*)';
+end;
+$$ language plpgsql;
+
+call del_duplicates_a('tmp');
+
+select * from tmp;
+
+
 -- ===============================================================================================
 -- === OK Создать хранимую процедуру с входным параметром – имя базы данных,
 -- которая выводит имена ограничений CHECK и выражения SQL, которыми
