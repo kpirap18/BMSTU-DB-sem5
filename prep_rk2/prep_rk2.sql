@@ -356,6 +356,45 @@ $$    LANGUAGE plpgsql;
 DROP TRIGGER update_my ON rate;
 CALL drop_trigger(0); 
 
+-- Вроде вроде это вот тригерры ddl
+SELECT * FROM pg_catalog.pg_event_trigger 
+
+CREATE OR REPLACE FUNCTION snitch() RETURNS event_trigger AS $$
+BEGIN
+    RAISE NOTICE 'Произошло событие: % %', tg_event, tg_tag;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER snitch ON ddl_command_start 
+EXECUTE PROCEDURE snitch();
+
+CREATE OR REPLACE PROCEDURE drop_trigger(count_ INOUT int)  
+AS 
+$$
+DECLARE 
+    tmp_trigger_name record;
+    cursor_trigger_name CURSOR FOR
+	    SELECT evtname, evtevent 
+	    FROM pg_catalog.pg_event_trigger 
+BEGIN  
+    OPEN cursor_trigger_name;
+    LOOP 
+    	
+        FETCH cursor_trigger_name INTO tmp_trigger_name;
+        EXIT WHEN NOT FOUND;
+   		count_ = count_ + 1;
+        EXECUTE 'DROP TRIGGER ' || tmp_trigger_name.trigger_name || ' ON ' || tmp_trigger_name.event_object_table;
+        RAISE NOTICE 'Trigger "%" was deleted!', tmp_trigger_name.trigger_name;
+    END LOOP;
+
+    CLOSE cursor_trigger_name;
+END;
+$$    LANGUAGE plpgsql;
+
+DROP TRIGGER update_my ON rate;
+CALL drop_trigger(0); 
+
+
 -- ============================================================================================
 -- === OK Создать хранимую процедуру, которая, не уничтожая базу данных, уничтожает 
 -- все те таблицы текущей базы данных в схеме 'dbo', имена которых начинаются с 
@@ -1108,6 +1147,12 @@ UPDATE pg_stats
 EXECUTE 'SQL CONNECT TO "rk2_2"';
 
 EXECUTE 'select * from rate'
+
+
+
+
+
+
 
 
 
