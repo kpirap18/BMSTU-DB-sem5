@@ -394,6 +394,14 @@ $$    LANGUAGE plpgsql;
 CALL drop_ddl_trigger(0); 
 
 
+DO $$
+DECLARE myvar int := 0;
+BEGIN
+  CALL drop_ddl_trigger(myvar);
+  RAISE NOTICE 'myvar = %', myvar;  
+END;
+$$;
+
 
 -- ============================================================================================
 -- === OK Создать хранимую процедуру, которая, не уничтожая базу данных, уничтожает 
