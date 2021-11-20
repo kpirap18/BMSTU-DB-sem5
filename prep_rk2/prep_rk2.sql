@@ -183,6 +183,9 @@ call get_index('rate');
 -- и имя таблицы, которая выводит сведения об индексах указанной таблицы в 
 -- указанной базе данных. Созданную хранимую процедуру протестировать.
 
+SELECT * FROM pg_catalog.pg_class 
+SELECT * FROM pg_catalog.pg_stat_activity 
+
 CREATE OR REPLACE PROCEDURE index_info
 (
     db_name_in VARCHAR(32),
@@ -217,6 +220,9 @@ FROM information_schema."tables" t
 SELECT *
 FROM pg_catalog.pg_database pd 
 
+
+
+
 -- ===============================================================================
 -- === OK Создать хранимую процедуру без параметров, в которой для экземпляра SQL Server 
 -- создаются резервные копии всех пользовательских баз данных. Имя файла резервной 
@@ -227,8 +233,7 @@ FROM pg_catalog.pg_database pd
 -- datistemplate может быть установлен, чтобы указать, что база данных предназначена 
 -- в качестве шаблона для CREATE DATABASE. Если этот флаг установлен, 
 -- база данных может быть клонирована любым пользователем с привилегиями CREATEDB; 
--- если он не установлен, клонироват ....
--- владелец базы данных. 
+-- если он не установлен, клонировать владелец базы данных. 
 
 -- pg_terminate_backend передают сигналы (SIGINT и SIGTERM, соответственно) серверному 
 -- процессу с заданным кодом PID. Код активного процесса можно получить из 
@@ -278,23 +283,29 @@ CALL backups();
 CREATE OR REPLACE PROCEDURE backup2()
 AS $$
 DECLARE
-    elem varchar;
+    elem record;
     reserve_name varchar;
+    last_name varchar;
 BEGIN
     FOR elem IN
-        SELECT datname FROM pg_database
+        SELECT datname FROM pg_database 
     LOOP
-        SELECT elem || '_' || EXTRACT(year FROM current_date)::varchar ||
-        EXTRACT(month FROM current_date)::varchar || EXTRACT(day FROM current_date)::varchar
-        INTO reserve_name;
-        RAISE NOTICE 'making copy of % as %', elem, reserve_name;
-        EXECUTE 'CREATE DATABASE ' || reserve_name || ' WITH TEMPLATE ' || elem;
-       
+        SELECT EXTRACT(YEAR FROM now())::varchar(20) || EXTRACT(DAY FROM now()) || EXTRACT(MONTH FROM now()) INTO reserve_name;
+		reserve_name = elem.datname::varchar(20) || '_' || reserve_name;
+    	last_name = elem.datname;
+    	RAISE NOTICE 'making copy of % as %', elem, reserve_name;
+		PERFORM dblink_exec('host=localhost user=postgres password=1830'   -- current db
+                     , 'CREATE DATABASE ' || reserve_name);       
     END LOOP;
 END;
 $$ LANGUAGE PLPGSQL;
 
 CALL backup2();
+
+SELECT * FROM pg_dump
+
+SELECT * FROM pg_catalog.pg_ts_template 
+
 
 -- =================================================================================================
 -- === OK NOT Создать хранимую процедуру с выходным параметром, которая уничтожает 
@@ -390,9 +401,6 @@ BEGIN
     CLOSE cursor_trigger_name;
 END;
 $$    LANGUAGE plpgsql;
-
-CALL drop_ddl_trigger(0); 
-
 
 DO $$
 DECLARE myvar int := 0;
@@ -594,7 +602,7 @@ SELECT nspname || '.' || relname AS "relation",
  
  
 -- ===================================================================================================
--- === NOT Создать хранимую процедуру с выходным параметром, которая выводит
+-- === OK Создать хранимую процедуру с выходным параметром, которая выводит
 -- список имен и параметров всех скалярных SQL функций пользователя
 -- (функции типа 'FN') в текущей базе данных. Имена функций без параметров
 -- не выводить. Имена и список параметров должны выводиться в одну строку.
@@ -602,6 +610,46 @@ SELECT nspname || '.' || relname AS "relation",
 -- Созданную хранимую процедуру протестировать. 
 
 -- в pg_type названия типов, можно как-то сделать чтобы выводились имена типов, но как....
+ 
+ 
+ -- не ну вроде...... норм
+create or replace procedure functions_info(count INOUT int) as
+$$
+    declare cur cursor
+        for select p.oid as id, oidvectortypes(proargtypes) as arg_type, proargnames, proname as name, nspname, prokind
+            from pg_proc p
+            inner join pg_namespace s
+            on p.pronamespace = s.oid
+            where s.nspname not in ('pg_catalog', 'pg_toast', 'information_schema')
+            and prokind = 'f'
+            and oidvectortypes(proargtypes) != ''
+            order by s.nspname;
+        row record;
+    begin
+        open cur;
+        loop
+            fetch cur into row;
+            exit when not found;
+            raise notice '{f_name : %} {args : %} {args_type : %}', row.name, row.proargnames, row.arg_type;
+            count = count + 1;
+        end loop;
+        raise notice 'function amount : %', count;
+        close cur;
+    end;
+$$ language plpgsql;
+
+ DROP PROCEDURE functions_info(integer)
+call functions_info(0);
+
+DO $$
+DECLARE myvar int := 0;
+BEGIN
+  call functions_info(myvar);
+  RAISE NOTICE 'myvar = %', myvar;  
+END;
+$$;
+
+
  CREATE OR REPLACE PROCEDURE info_function
 (
     count_ INOUT int
@@ -612,7 +660,7 @@ DECLARE
     elem RECORD;
 BEGIN
     FOR elem in
-        SELECT proname, prokind, proargnames, proallargtypes, pronargs
+        SELECT *
         FROM pg_proc
         WHERE prokind = ''f'' and pronargs > 0
     LOOP
@@ -764,12 +812,11 @@ $$;
 
 CALL rem_duplicates('test_duplicates');
 
-
+------ еще вариант
 select *
 from information_schema.columns 
 where information_schema.columns.table_name='test_duplicates'
 
------- еще вариант
 drop table if exists tmp;
 create table if not exists tmp (a integer, b integer, c varchar(5));
 insert into tmp values (1, 1, '2'), (2, 3, '3'), (1, 1, '2'), (2, 3, '3'), (1, 1, '2');
@@ -792,7 +839,6 @@ $$ language plpgsql;
 call del_duplicates_a('tmp');
 
 select * from tmp;
-
 
 -- ===============================================================================================
 -- === OK Создать хранимую процедуру с входным параметром – имя базы данных,
@@ -857,7 +903,7 @@ as
 $$
 declare
     c record;
-begin
+BEGIN
     select constraint_catalog, constraint_schema, constraint_name, check_clause into c 
     from information_schema.check_constraints cc JOIN pg_catalog.pg_constraint pp ON pp.conname = cc.constraint_name 
 	where pp.contype = 'c' and cc.check_clause like '%~~%' and cc.constraint_catalog = bname;
@@ -878,7 +924,7 @@ select *
 from pg_catalog.pg_constraint pp JOIN information_schema.check_constraints cc ON pp.conname = cc.constraint_name 
 where pp.contype = 'c' and (cc.check_clause like '%~~%') and cc.constraint_catalog = 'rk2_1';
 
-
+---------------- 
 -- ==============================================================================================
 -- === OK, но в идеале доделать
 -- Вывести имя функции и типы принимаемых значений
@@ -979,7 +1025,7 @@ END;
 
 CALL info_routine('SELECT');
 
-select data_type , routine_definition
+select *
 FROM information_schema.routines
 WHERE specific_schema = 'public';
 
@@ -1086,6 +1132,10 @@ CALL proc_name();
 --
 -- Насколько мне известно в postgres процедуры не могут возвращать никаких значений,
 -- поэтому я вывожу в консоль количество функций.
+
+SELECT * FROM pg_catalog.pg_namespace 
+
+
 create or replace procedure functions_info(count int) as
 $$
     declare cur cursor
@@ -1123,7 +1173,8 @@ SELECT * FROM pg_catalog.pg_user pu
 -- тексте которых на языке SQL встречается строка, задаваемая параметром
 -- процедуры. Созданную хранимую процедуру протестировать. 
 
-CREATE OR REPLACE PROCEDURE info_routine
+-- невозможно в посгресе 
+CREATE OR REPLACE PROCEDURE info_routine3
 (
     str VARCHAR(32)
 )
@@ -1132,12 +1183,11 @@ DECLARE
     elem RECORD;
 BEGIN
     FOR elem in
-        SELECT routine_name, routine_type
+        SELECT *
         FROM information_schema.routines
              -- Чтобы были наши схемы.
         WHERE specific_schema = ''public''
-        AND (routine_type = ''PROCEDURE''
-        OR (routine_type = ''FUNCTION'' AND data_type != ''record''))
+        AND routine_type = ''PROCEDURE''
         AND routine_definition LIKE CONCAT(''%'', str, ''%'')
     LOOP
         RAISE NOTICE ''elem: %'', elem;
@@ -1168,26 +1218,9 @@ RETURNS INT AS '
 
 SELECT * FROM pg_catalog.pg_stat_activity psa 
 
-select specific_catalog, specific_schema, specific_name, routine_definition
+SELECT * 
 from information_schema.ROUTINES
 WHERE specific_schema = 'public'
 
 SELECT * FROM pg_stats WHERE tablename = 'tbl'
 UPDATE pg_stats
-
-
-
-EXECUTE 'SQL CONNECT TO "rk2_2"';
-
-EXECUTE 'select * from rate'
-
-
-
-
-
-
-
-
-
-
-
