@@ -240,7 +240,19 @@ def task_5():
 # Все отделы и кол-во сотрудников
 # Хоть раз опоздавших за всю историю учета.
 def task_6():
-    pass
+    query = Employee\
+        .select(Employee.department, fn.count(SQL('employee_id').distinct()))\
+        .from_(Record\
+            .select( #fn.Distinct(Record.rdate, SQL('time_in')),
+                    SQL('employee_id'), 
+                    Record.rdate, 
+                    fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
+            .where(Record.rtype==1)).alias('r')\
+        .join(Employee, on=(Employee.id == SQL('employee_id')))\
+        .where(SQL('time_in') > '09:00:00')\
+        .group_by(Employee.department)
+
+    print_query(query)
 
 # Найти самого старшего сотрудника в бухгалтерии
 def task_7():
@@ -273,11 +285,36 @@ def task_8():
 # Найти сотрудника, который пришел сегодня последним
 def task_9():
     Record1 = Record.alias()
+    dat = '21-12-2019'
+    query1 = Record1\
+        .select(Record1.rdate,
+                fn.min(Record1.rtime)\
+                    .over(partition_by=[Record1.employee_id, Record1.rdate]).alias('time_in'))\
+        .where(Record1.rtype == 1)\
+        .where(Record1.rdate == dat)\
+        .order_by(SQL('time_in').desc())\
+        .distinct()\
+        .limit(1)
+    print_query(query1)
 
-    query = Record1\
-        .select(Record1.employee_id, Record1.rdate, fn.min(Record1.rtime)\
-                .over(partition_by=[Record1.employee_id, Record1.rdate]).alias('time_in'))\
-        .where(Record1.rtype == 1).distinct()
+
+# В идеале сравнить время с максимумом за нужную дату....
+# Но что-то пошло не так
+# Поэтому сортировка и беру первую
+    query = Employee\
+    .select(Employee.id, Employee.fio, SQL('time_in'), SQL('rdate'))\
+    .from_(Record\
+        .select( #fn.Distinct(Record.rdate, SQL('time_in')),
+                SQL('employee_id'), 
+                SQL('rdate'), 
+                fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
+        .where(Record.rtype==1)).alias('r')\
+    .join(Employee, on=(Employee.id == SQL('employee_id')))\
+    .where(SQL('rdate') == dat)\
+    .order_by(SQL('time_in').desc())\
+    .limit(1)
+    # .where(SQL('time_in') == query1.c.time_in)
+
     print_query(query)
 
 def task_10():
@@ -285,7 +322,7 @@ def task_10():
 
 
 def main():
-    task_3()
+    task_9()
 
 
 if __name__ == '__main__':
