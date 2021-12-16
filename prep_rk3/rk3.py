@@ -197,7 +197,7 @@ def task_3():
 
     res = (Employee
             .select(Employee.department)\
-            .from_(Record
+            .from_(Record\
                     .select(SQL('employee_id'), SQL('rdate'), SQL('rtime'), SQL('rdate'), SQL('rtype'), SQL('num'))\
                     .from_(Record
                             .select(Record.employee_id.alias('employee_id'), Record.rdate.alias('rdate'), Record.rtime.alias('rtime'),
@@ -235,7 +235,29 @@ def task_4():
 # Найти средний возраст сотрудников, не находящихся
 # на рабочем месте 8 часов в день.
 def task_5():
-    pass
+    now = datetime.now().year
+
+    query = Employee\
+        .select(fn.avg(now - fn.Date_part('year', Employee.birthdate)))\
+        .from_(
+            Record\
+                .select(fn.Distinct(SQL('employee_id'), SQL('rdate')), SQL('employee_id'), SQL('rdate'), (fn.sum(SQL('tmp_dur')).over(partition_by=[SQL('employee_id'), SQL('rdate')])).alias('day_dur'))\
+                .from_(
+                    Record\
+                        .select(SQL('employee_id'), 
+                                SQL('rdate'), 
+                                SQL('rtime'), 
+                                SQL('rtype'), 
+                                fn.Lag(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('prev_time'),
+                                (Record.rtime - fn.Lag(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate])).alias('tmp_dur'),
+                                )\
+                        .order_by(Record.employee_id, Record.rdate, Record.rtime)
+                ).alias('small_durations')\
+        ).alias('day_durations')\
+        .join(Employee, on=(Employee.id==SQL('employee_id')))\
+        .where(SQL('day_dur') < '11:00:00')
+
+    print_query(query)
 
 # Все отделы и кол-во сотрудников
 # Хоть раз опоздавших за всю историю учета.
@@ -322,7 +344,7 @@ def task_10():
 
 
 def main():
-    task_9()
+    task_5()
 
 
 if __name__ == '__main__':
