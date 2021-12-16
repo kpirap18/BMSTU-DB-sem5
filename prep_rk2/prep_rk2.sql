@@ -1224,3 +1224,26 @@ WHERE specific_schema = 'public'
 
 SELECT * FROM pg_stats WHERE tablename = 'tbl'
 UPDATE pg_stats
+
+
+
+SELECT * FROM pg_stat_rate
+
+
+SELECT * FROM rate;
+
+EXPLAIN ANALYSE SELECT count(*) FROM rate; 
+UPDATE STATISTICS s1; 
+
+CREATE STATISTICS s1 (dependencies) ON id,sale FROM rate;
+
+SELECT * FROM pg_stat_user_tables;
+
+
+
+
+SELECT ir.routine_name, ir.specific_name, ip.specific_name, ip.parameter_name
+FROM information_schema.routines as ir
+JOIN information_schema.parameters as ip
+ON ip.specific_name = ir.specific_name
+WHERE routine_type = 'FUNCTION';
