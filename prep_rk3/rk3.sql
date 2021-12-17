@@ -777,6 +777,41 @@ $$ language plpython3u;
 -- Возраст сотрудника, опоздавшего более чем на 10 минут.
 -- Минимальный возраст == максимальная дата рождения.
 
+
+
+-------------------------------------------------------------------------------- версия Алены (все еще странно)
+drop function if exists task3();
+CREATE OR REPLACE FUNCTION task3()
+RETURNS real
+AS $$
+plan = plpy.prepare("""
+select min(EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birth_date)) as min_age
+from employees 
+where employee_id in (
+	with help_row_numbers as (
+			select id, employee_id, r_date, r_time, r_type, row_number() over (partition by employee_id, r_date, r_type order by r_time) as r1
+			from times
+			order by employee_id, r_date, r_time, r_type)
+		select employee_id
+		from help_row_numbers
+		where r_type = 1 and r1 = 1
+		group by employee_id
+		having max(r_time) - '09:00:00' > '00:10:00');""")
+
+res = plpy.execute(plan)
+
+if res:
+	return res[0]['min_age']
+
+$$ LANGUAGE plpython3u;
+
+SELECT * FROM task3() as "min_age";
+--------------------------------------------------------------------------- конец
+
+
+
+
+
 -- запрос верный, но в функции твориться какая-то ерунда, возврат 31, когда запрос 24 и 22
 CREATE OR REPLACE FUNCTION get_latecomer()
 RETURNS INT
