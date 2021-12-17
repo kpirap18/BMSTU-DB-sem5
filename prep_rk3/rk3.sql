@@ -165,7 +165,7 @@ having count(*) >2
 
 
 SELECT * FROM record;
-select * from latters_cnt2('2019-12-21')
+select * from latters_cnt('2019-12-21')
 
 -- Задание 1 часть 2.
 -- Кол-во опоздавших сотрудников.
@@ -185,20 +185,23 @@ CREATE OR REPLACE FUNCTION get_latecomers2(dt DATE)
 RETURNS INT
 AS $$
 count_ = 0
-plan = plpy.prepare("SELECT DISTINCT employee_id \
+plan = plpy.prepare("SELECT employee_id \
 				FROM record \
-				WHERE rdate = $1 AND rtime > '09:00:00' AND rtype = 1;", ["DATE"])
+				WHERE rdate = $1 AND rtype = 1\
+				group by employee_id \
+				HAVING min(rtime) > '9:00';", ["DATE"])
 
 run = plpy.execute(plan, [dt])
 count_ = run.nrows()
 return count_
 $$ LANGUAGE plpython3u;
 
-SELECT count(DISTINCT employee_id)
+SELECT employee_id
 FROM record
 WHERE rdate = '2019-12-21'
-AND rtime > '09:00:00'
 AND rtype = 1
+group by employee_id 
+HAVING min(rtime) > '9:00'
 
 SELECT get_latecomers2('2019-12-21') AS cnt;
 
@@ -465,6 +468,13 @@ where rdate = '21-12-2019' and time_in =
 
 						
 -- 10. Найти все отделы, в которых нет сотрудников моложе 25 лет
+select DISTINCT department 
+from employee e 
+where department not in 
+(select DISTINCT department 
+from employee
+where EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate) < 25 )
+
 
 
 -- 11. Найти сотружника, который пришел сегодня раньше всех на работу
@@ -474,30 +484,74 @@ with first_time_in as (
 	where rtype = 1)
 select employee.id, employee.fio, time_in
 from first_time_in join employee on first_time_in.employee_id = employee.id
-where rdate = '21-12-2019' and time_in = (select min(time_in)
+where rdate = '23-12-2019' and time_in = (select min(time_in)
 				 from first_time_in
-				 where rdate = '21-12-2019')
+				 where rdate = '23-12-2019')
+				 
+				 
 				 
 -- 12. Найти сотрудников, опоздавших не менее 5-ти раз
-				 
-				 
+			 
+with first_time_in as (
+	select distinct on (employee_id , rdate, time_in) employee_id, rdate, min(rtime) OVER (PARTITION BY employee_id, rdate) as time_in
+	from record
+	where rtype = 1 )
+select id , count(first_time_in.employee_id)
+from first_time_in join employee on first_time_in.employee_id = employee.id
+where time_in > '09:00:00'
+group by id 
+having count(first_time_in.employee_id) > 3;
 
--- 13. Найти сотрудников, опоздавших сегодня меньше, чем на 5 минут
+
+select id , fio, count(first_time_in.employee_id)
+from (select distinct on (employee_id , rdate, time_in) employee_id, rdate, min(rtime) OVER (PARTITION BY employee_id, rdate) as time_in
+	from record
+	where rtype = 1 ) as first_time_in join employee on first_time_in.employee_id = employee.id
+where time_in > '09:00:00'
+group by id, fio
+having count(first_time_in.employee_id) > 3;
+
+
+
+-- 13. ????Найти сотрудников, опоздавших сегодня меньше, чем на 5 минут
 with first_time_in as (
 	select distinct on (rdate, time_in) employee_id, rdate, min(rtime) OVER (PARTITION BY employee_id, rdate) as time_in
 	from record
 	where rtype = 1)
 select employee.id, employee.fio, time_in
 from first_time_in join employee on first_time_in.employee_id = employee.id
-where rdate = '23-12-2019' and time_in >= '9:05'
+where rdate = '23-12-2019' and time_in <= '9:05' and time_in > '9:00'
 					
 				 
+select employee.id, employee.fio, time_in
+from (select distinct on (rdate, time_in) employee_id, rdate, min(rtime) OVER (PARTITION BY employee_id, rdate) as time_in
+	from record
+	where rtype = 1) as first_time_in join employee on first_time_in.employee_id = employee.id
+where rdate = '23-12-2019' and time_in <= '9:05' and time_in > '9:00'
+					
+					 
 				 
+-- 14. ДОДЕЛАТЬ  Найти сотрудников, которые выходили больше, чем на 10 минут
+select avg(EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate))
+from employee join
+	(
+	select distinct on (employee_id, rdate) employee_id, rdate, sum(tmp_dur) over (partition by employee_id, rdate) as day_dur
+	from
+		(
+		select employee_id, rdate, rtime, 
+			rtype, 
+			lag(rtime) over (partition by employee_id, rdate order by rtime) as prev_time, 
+			rtime-lag(rtime) over (partition by employee_id, rdate order by rtime) as tmp_dur
+		from record r 
+		order by employee_id, rdate, rtime
+		) as small_durations
+	) as day_durations
+on employee.id = day_durations.employee_id
+where day_durations.day_dur < '11:00:00';
+
+
 				 
--- 14. Найти сотрудников, которые выходили больше, чем на 10 минут
-				 
-				 
--- 15. Найти сотрудников бухгалтерии, приходивших на работу раньше 8-00
+-- 15. ????Найти сотрудников бухгалтерии, приходивших на работу раньше 8-00
 				 
 with first_time_in as (
 	select distinct on (rdate, time_in) employee_id, rdate, min(rtime) OVER (PARTITION BY employee_id, rdate) as time_in
@@ -505,14 +559,16 @@ with first_time_in as (
 	where rtype = 1)
 select employee.id, employee.fio, time_in
 from first_time_in join employee on first_time_in.employee_id = employee.id
-where employee.department = 'Fin' and time_in <= '9:00'
+where employee.department = 'IT' and time_in <= '9:00'
 					
 				 
 -- 17. Найти департ, в которых работает от 6 до 15 сотрудников в возрасте 26 лет
 
-
-
-
+select department 
+from employee e 
+where EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate) =25 -- типа возраст 26
+group by department
+HAVING count(*) >= 2 -- типа от 6 до 15
 
 
 
@@ -522,27 +578,40 @@ where employee.department = 'Fin' and time_in <= '9:00'
 
 
 
--- Написать табличную функцию, возвращающую сотрудников, не пришедших сегодня на
+-- &&&&&&&&&&&&&&&&Написать табличную функцию, возвращающую сотрудников, не пришедших сегодня на
 -- работу. «Сегодня» необходимо вводить в качестве параметра.
+
+create extension plpython3u;
 
 CREATE OR REPLACE FUNCTION missed_work(dt DATE) -- dt - "сегодня"
 RETURNS TABLE
 (
     id INT,
-    fio VARCHAR
+    fio VARCHAR,
+    department VARCHAR
 )
-AS
-$$
-    SELECT id, fio
-    FROM employee
-    WHERE id NOT IN
-    (
-        SELECT employee.id
-        FROM employee JOIN record ea on employee.id = ea.employee_id
-        WHERE rdate = dt
-        AND rtype = 1
-    );
-$$LANGUAGE SQL;
+AS $$
+	plan = plpy.prepare(f"\
+	    SELECT id, fio, department\
+	    FROM employee\
+	    WHERE id NOT IN\
+	    (\
+	        SELECT employee.id\
+	        FROM employee JOIN record ea on employee.id = ea.employee_id\
+	        WHERE rdate = {$1}\
+	        AND rtype = 1);", ["DATE"])
+	res = plpy.execute(plan, [dt])
+--    SELECT id, fio
+--    FROM employee
+--    WHERE id NOT IN
+--    (
+--        SELECT employee.id
+--        FROM employee JOIN record ea on employee.id = ea.employee_id
+--        WHERE rdate = '21-12-2019'--dt
+--        AND rtype = 1
+--    );
+return res
+$$LANGUAGE plpython3u;
 
 SELECT * FROM missed_work('21-12-2019');
 
@@ -570,38 +639,104 @@ SELECT COUNT(*) FROM new_table;
 $$LANGUAGE SQL;
 
 
+create or replace function latters_cnt(target_date date) 
+returns int 
+as $$
+	BEGIN
+	RETURN(
+		select count(*)
+		from(
+			select distinct id
+			from employee
+			where EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate) BETWEEN 18 and 40 and 
+			id in(
+				select employee_id
+				from(
+					select employee_id, rdate, rtype, count(*)
+					from record
+					where rdate = target_date
+					group by employee_id, rdate, rtype
+					having rtype = 2 and count(*) >= 3
+					) as tmp0
+				)
+			) as tmp1
+		);
+	END;
+	$$ language plpgsql;
+
+create or replace function latters_cnt2(target_date varchar) 
+RETURNS INT
+AS $$
+count_ = 0
+result_ = plpy.execute(f" \
+				SELECT employee_id, birthdate, rdate, rtype \
+				FROM employee e JOIN record r ON e.id = r.employee_id \
+				group by employee_id, birthdate, rdate, rtype \
+				having count(*) > 2;")
+
+for i in result_:
+	if i["rtype"] == 2 and i["rdate"] == target_date:
+		count_ += 1
+return count_
+$$ LANGUAGE plpython3u;
+
+
+
+
 SELECT date_part('year', age('2000-07-19'::date));
 
 SELECT * FROM count_employee() AS cnt;
 
--- ???Написать скалярную функцию, возвращающую минимальный
+-- ???????????????Написать скалярную функцию, возвращающую минимальный
 -- Возраст сотрудника, опоздавшего более чем на 10 минут.
 -- Минимальный возраст == максимальная дата рождения.
 CREATE OR REPLACE FUNCTION get_latecomer()
 RETURNS INT
-AS
-$$
-    SELECT date_part('year',age(MAX(employee.birthdate)))
-    FROM employee JOIN record ea on employee.id = ea.employee_id
-    WHERE ea.rtype = 1 AND ea.rtime > '09:10:00'
-$$LANGUAGE SQL;
-
-
+AS $$
+res = plpy.execute(f"\
+	SELECT max(date_part('year', age(birthdate))) as m\
+    FROM employee JOIN record ea on employee.id = ea.employee_id\
+    WHERE ea.rtype = 1 --AND ea.rtime > '09:10:00'\
+    group by id \
+    having min(ea.rtime) > '9:10'\
+	order by m desc")
+return int(res[0]['m'])
+$$LANGUAGE plpython3u;
 
 SELECT * FROM get_latecomer();
 
+SELECT max(date_part('year', age(birthdate)))
+FROM employee JOIN record ea on employee.id = ea.employee_id
+WHERE ea.rtype = 1 --AND ea.rtime > '09:10:00'
+group by id 
+having min(ea.rtime) > '9:10'
 
 
+-- департамент с минимальным кол-вои сотрудников
+CREATE OR REPLACE FUNCTION Min_Count()
+RETURNS VARCHAR(20) AS $$
+	res = plpy.execute("select test.department\
+   		 				from (\
+				        select distinct e.department, min(count(e.id)) over (partition by e.id) as total\
+				        from record r join employee e on r.employee_id = e.id\
+				        group by e.department, e.id) as test\
+				        order by total limit 1;")
+	return res[0]['department']
+$$ LANGUAGE plpython3u;
 
 
+select Min_Count();
 
 
+-- Написать табличную функцию, возвращающую статистику 
+-- на сколько и кто опоздал в
+-- определенную дату. Дату вводить с клавиатуры.
 
-
-
-
-
-
+select DISTINCT min(rtime) - '9:00', count(*)
+from record r 
+where rdate = '21-12-2019' and rtype = 1
+group by employee_id
+having min(r.rtime) > '9:00'
 
 
 

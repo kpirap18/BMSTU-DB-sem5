@@ -265,9 +265,9 @@ def task_6():
     query = Employee\
         .select(Employee.department, fn.count(SQL('employee_id').distinct()))\
         .from_(Record\
-            .select( #fn.Distinct(Record.rdate, SQL('time_in')),
+            .select(fn.Distinct(SQL('employee_id'), SQL('rdate')),
                     SQL('employee_id'), 
-                    Record.rdate, 
+                    SQL('rdate'), 
                     fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
             .where(Record.rtype==1)).alias('r')\
         .join(Employee, on=(Employee.id == SQL('employee_id')))\
@@ -326,7 +326,7 @@ def task_9():
     query = Employee\
     .select(Employee.id, Employee.fio, SQL('time_in'), SQL('rdate'))\
     .from_(Record\
-        .select( #fn.Distinct(Record.rdate, SQL('time_in')),
+        .select(fn.Distinct(SQL('employee_id'), SQL('rdate')),
                 SQL('employee_id'), 
                 SQL('rdate'), 
                 fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
@@ -339,12 +339,88 @@ def task_9():
 
     print_query(query)
 
+#  Найти все отделы, в которых нет сотрудников моложе 25 лет
 def task_10():
+    now = datetime.now().year
+    query = Employee\
+        .select(Employee.department)\
+        .where((now - fn.Date_part('year', Employee.birthdate)) < 25)\
+        .distinct()
+
+    res = Employee\
+        .select(Employee.department)\
+        .where(Employee.department.not_in(query))
+
+    print_query(res)
+
+# Найти сотружника, который пришел сегодня раньше всех на работу
+def task_11():
+    dat = '23-12-2019'
+    query = Employee\
+    .select(Employee.id, Employee.fio, SQL('time_in'), SQL('rdate'))\
+    .from_(Record\
+        .select(fn.Distinct(SQL('employee_id'), SQL('rdate')),
+                SQL('employee_id'), 
+                SQL('rdate'), 
+                fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
+        .where(Record.rtype==1)).alias('r')\
+    .join(Employee, on=(Employee.id == SQL('employee_id')))\
+    .where(SQL('rdate') == dat)\
+    .order_by(SQL('time_in'))\
+    .limit(1)
+
+    print_query(query)
+
+#  Найти сотрудников, опоздавших не менее 5-ти раз
+def task_12():
+    query = Employee\
+    .select(Employee.id, Employee.fio, fn.count(SQL('employee_id')))\
+    .from_(Record\
+        .select(fn.Distinct(SQL('employee_id'), SQL('rdate')),
+                SQL('employee_id'), 
+                SQL('rdate'), 
+                fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
+        .where(Record.rtype==1)).alias('r')\
+    .join(Employee, on=(Employee.id == SQL('employee_id')))\
+    .where(SQL('time_in') > '09:00')\
+    .group_by(Employee.id, Employee.fio)\
+    .having(fn.count(SQL('employee_id')) > 3)
+
+    print_query(query)
+
+# Найти сотрудников, опоздавших сегодня меньше, чем на 5 минут
+def task_13():
+    dat = '23-12-2019'
+    query = Employee\
+    .select(Employee.id, Employee.fio)\
+    .from_(Record\
+        .select(fn.Distinct(SQL('employee_id'), SQL('rdate')),
+                SQL('employee_id'), 
+                SQL('rdate'), 
+                fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
+        .where(Record.rtype==1)).alias('r')\
+    .join(Employee, on=(Employee.id == SQL('employee_id')))\
+    .where(SQL('time_in') > '09:00')\
+    .where(SQL('time_in') <= '09:05')\
+    .where(SQL('rdate') == dat)
+
+    print_query(query)
+
+def task_14():
+    pass
+
+def task_15():
+    pass
+
+def task_16():
+    pass
+
+def task_17():
     pass
 
 
 def main():
-    task_5()
+    task_13()
 
 
 if __name__ == '__main__':
