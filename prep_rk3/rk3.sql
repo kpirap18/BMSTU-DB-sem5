@@ -584,7 +584,7 @@ HAVING count(*) >= 2 -- типа от 6 до 15
 
 
 
--- ???Написать табличную функцию, возвращающую сотрудников, не пришедших сегодня на
+-- 1. ???Написать табличную функцию, возвращающую сотрудников, не пришедших сегодня на
 -- работу. «Сегодня» необходимо вводить в качестве параметра.
 
 create extension plpython3u;
@@ -594,7 +594,12 @@ CREATE TYPE type_dur1 AS
     id INT,
     fio VARCHAR,
     department VARCHAR
+)
+WITH (
+  OIDS = FALSE,
+  autovacuum_enabled = true
 );
+
 
 -- не знаю как вернуть таблицу из plpy 
 -- а так запрос верный 
@@ -629,7 +634,7 @@ SELECT * FROM missed_work('21-12-2019');
         AND rtype = 1
     );
 
--- ???Написать скалярную функцию, возвращающую количество сотрудников
+-- 2. ???Написать скалярную функцию, возвращающую количество сотрудников
 -- в возрасте от 18 до 40, выходивших более 3х раз.
 
 -- какая-то странная ошибка в функции
@@ -694,7 +699,7 @@ $$ language plpython3u;
 --group by employee_id, birthdate, rdate, rtype 
 --having count(*) > 2;
 
--- ???Написать скалярную функцию, возвращающую минимальный
+-- 3. ???Написать скалярную функцию, возвращающую минимальный
 -- Возраст сотрудника, опоздавшего более чем на 10 минут.
 -- Минимальный возраст == максимальная дата рождения.
 
@@ -709,6 +714,7 @@ AS $$
 	    group by id \
 	    having min(ea.rtime) > '9:10'\
 		order by m desc;")
+	plpy.notice(res)
 	return res[0]['m']
 $$LANGUAGE plpython3u;
 
@@ -723,7 +729,7 @@ having min(ea.rtime) > '9:10'
 order by m desc
 
 
--- департамент с минимальным кол-вои сотрудников
+-- 4. департамент с минимальным кол-вои сотрудников
 -- просто нашла где-то)))))
 -- вроде правильно
 CREATE OR REPLACE FUNCTION Min_Count()
@@ -735,7 +741,7 @@ RETURNS VARCHAR(20) AS $$
 				        group by e.department, e.id) as test\
 				        order by total limit 1;")
 	return res[0]['department']
-$$ LANGUAGE plpython3u;
+$$ LANGUAGE 'plpython3u' VOLATILE;
 select Min_Count();
 
 select test.department
@@ -747,7 +753,7 @@ order by total limit 1;
 
 
 
--- ???Написать табличную функцию, возвращающую статистику 
+-- 5. Написать табличную функцию, возвращающую статистику 
 -- на сколько и кто опоздал в
 -- определенную дату. Дату вводить с клавиатуры.
 select mt, count(mt)
@@ -760,16 +766,22 @@ from (
 group by mt
 
 
-CREATE TYPE type1 AS
+CREATE table res_test
 (
-    time_ time,
+    mt  time,
     cnt int
+)
+WITH (
+  OIDS = FALSE,
+  autovacuum_enabled = true
 );
+
+
+drop table res_test
 -- выводит первую линию, а надо всю таблицу
 CREATE OR REPLACE FUNCTION let_emp()
-RETURNS type1
+RETURNS setof res_test
 AS $$
-	a = list()
 	res = plpy.execute("select mt, count(mt) as cnt\
    		 				from (\
 				        select  (min(rtime) - '9:00') as mt\
@@ -779,9 +791,16 @@ AS $$
 				        having min(r.rtime) > '9:00') as t1\
 						group by mt;")
 
-	return ([res[0]['mt'], res[0]['cnt']])
-$$ LANGUAGE plpython3u;
-select let_emp();
+	r = []
+	plpy.notice(res)
+	#for i in res:
+	#	r.append(i)
+	
+	return res
+$$ LANGUAGE 'plpython3u' VOLATILE;
+
+
+select * from let_emp();
 
 
 
