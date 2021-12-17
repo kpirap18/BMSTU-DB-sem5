@@ -407,20 +407,62 @@ def task_13():
     print_query(query)
 
 def task_14():
-    pass
+    now = datetime.now().year
+    dt = '21-12-2019'
+
+    query = Record\
+                .select(fn.Distinct(SQL('employee_id')))\
+                .from_(
+                    Record\
+                        .select(SQL('employee_id'), 
+                                SQL('rdate'), 
+                                SQL('rtime'), 
+                                SQL('rtype'), 
+                                fn.Lag(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('prev_time'),
+                                (Record.rtime - fn.Lag(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate])).alias('tmp_dur'),
+                                )\
+                        .order_by(Record.employee_id, Record.rdate, Record.rtime)
+                ).alias('small_durations')\
+        .join(Employee, on=(Employee.id==SQL('employee_id')))\
+        .where(SQL('tmp_dur') > '00:10:00')\
+        .where(SQL('rdate') == dt)\
+        .group_by(SQL('employee_id'))\
+        .having(fn.count(SQL('employee_id')) > 1)
+
+    print_query(query)
 
 def task_15():
-    pass
+    query = Employee\
+    .select(fn.Distinct(Employee.id, Employee.fio), Employee.id, Employee.fio)\
+    .from_(Record\
+        .select(fn.Distinct(SQL('employee_id'), SQL('rdate')),
+                SQL('employee_id'), 
+                SQL('rdate'), 
+                fn.min(Record.rtime).over(partition_by=[Record.employee_id, Record.rdate]).alias('time_in'))\
+        .where(Record.rtype==1)).alias('r')\
+    .join(Employee, on=(Employee.id == SQL('employee_id')))\
+    .where(Employee.department == 'IT')\
+    .where(SQL('time_in') <= '9:00')
+
+    print_query(query)
 
 def task_16():
-    pass
+    now = datetime.now().year
 
-def task_17():
-    pass
+    query = Employee\
+        .select(Employee.department)\
+        .where((now - fn.Date_part('year', Employee.birthdate)) == 25)\
+        .group_by(Employee.department)\
+        .having(fn.count(Employee.id) >= 2)
+    
+    print_query(query)
+
+# def task_17():
+#     pass
 
 
 def main():
-    task_13()
+    task_14()
 
 
 if __name__ == '__main__':
