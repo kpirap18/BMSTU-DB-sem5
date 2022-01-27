@@ -170,11 +170,13 @@ def task_2():
 
 
     res = Employee\
-        .select(Employee.fio)\
+        .select(fn.Distinct(Employee.fio), Employee.fio)\
         .join(t1, on=Employee.id == SQL('res1.employee_id'))\
         .join(t2, on=Employee.id == SQL('res2.employee_id'))\
 
     print_query(res)
+
+    print(res)
 
 
 # Найти все отделы, в которых есть сотрудники, опоздавшие \
@@ -182,21 +184,9 @@ def task_2():
 def task_3():
     print("3. Найти все отделы, в которых есть сотрудники, опоздавшие в определенную дату. Дату передавать с клавиатуры")
     dat = '2019-12-21'
-    query = Record\
-        .select(Record.employee_id)\
-        .where(Record.rtype == 1 and Record.rdate == dat)\
-        .group_by(Record.employee_id)\
-        .having(fn.Min(Record.rtime) > '9:00')
-
-    query1 = Employee\
-        .select(Employee.department).distinct()\
-        .where(Employee.id.in_(query))
-
-    print_query(query1)
-
 
     res = (Employee
-            .select(Employee.department)\
+            .select(fn.Distinct(Employee.department), Employee.department)\
             .from_(Record\
                     .select(SQL('employee_id'), SQL('rdate'), SQL('rtime'), SQL('rdate'), SQL('rtype'), SQL('num'))\
                     .from_(Record
@@ -462,7 +452,7 @@ def task_16():
 
 
 def main():
-    task_14()
+    task_3()
 
 
 if __name__ == '__main__':
